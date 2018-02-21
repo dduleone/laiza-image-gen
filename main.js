@@ -1,387 +1,421 @@
-var fs = require("fs");
-var Jimp = require("jimp");
+const fs = require("fs");
+const Jimp = require("jimp");
 
 
-	// settings
-const 
-	
-	// meta
-
-	RESOLUTION =       1024,     // resolution of the output pics
-	ITER_COUNT =       6,       // number of iterations to be processed for each image
-	IMAGES_COUNT =     5,       // number of images to generate
-	SAVE_ALL_ITERS =   false,   // save all iterations or only the final one
+    // settings
 
 
-	// postprocessing
-
-	SATURATION_CONST = false,   // constant saturation in 0-1 range
-	
-
-	// modes
-
-	RANDOM_FILTERS =   false,   // randomize what filters will be used
-	TEST_MODE =        false,   // all filters except test will be disabled
-
-
-	// filters
-
-	USE_TEST =         false,   // enable testing of the custom filter
-	USE_CIRCLES =      true,    // enable the "circles" filter
-	USE_SINLINES =     true,    // enable the "sinlines" filter
-	USE_COSLINES =     true,    // enable the "coslines" filter
-	USE_SWIRL =        true,    // enable the "swirl" filter
-	USE_TANGRAD =      true,    // enable the "tangrad" filter
-	USE_GRADIENT =     true,    // enable the "gradient" filter
-	USE_FUZZY =        false,   // enable the "fuzzy" filter - NOTE: PRETTY FUCKED ATM
-	USE_POWREMAIN =    true,    // enable the "powremain" filter
-	USE_POWSUBTRACT =  true;    // enable the "powsubtract" filter
-	
+// meta
+const RESOLUTION =       1024;     // resolution of the output pics
+const RESOLUTION_DOUBLE = RESOLUTION * 2;
+const RESOLUTION_HALF = RESOLUTION / 2;
+const ONE_OVER_RESOLUTION = 1 / RESOLUTION;
+const ITER_COUNT =       6;       // number of iterations to be processed for each image
+const IMAGES_COUNT =     5;       // number of images to generate
+const SAVE_ALL_ITERS =   false;   // save all iterations or only the final one
 
 
-var stream = fs.createWriteStream("morph.log", {flags:'a'})
-fs.writeFile('morph.log', '', function(err){if (err) console.log(err)}) // clean file
+// post-processing
+const SATURATION_CONST = false;   // constant saturation in 0-1 range
 
 
+// modes
+const RANDOM_FILTERS =   false;   // randomize what filters will be used
+const TEST_MODE =        false;   // all filters except test will be disabled
 
 
-for (var i = 1; i <= IMAGES_COUNT; i++) {
-	generate(i)
+const FILTER_TEST = 'testfilters';
+const FILTER_CIRCLES = 'circles';
+const FILTER_SINLINES = 'sinlines';
+const FILTER_COSLINES = 'coslines';
+const FILTER_SWIRL = 'swirl';
+const FILTER_TANGRAD = 'tangrad';
+const FILTER_GRADIENT = 'gradient';
+const FILTER_FUZZY = 'fuzzy';
+const FILTER_POWREMAIN = 'powremain';
+const FILTER_POWSUBTRACT = 'powsubtract';
+
+// filters
+const FILTERS = [
+    // FILTER_TEST, // enable testing of the custom filter
+    FILTER_CIRCLES, // enable the "circles" filter
+    FILTER_SINLINES, // enable the "sinlines" filter
+    FILTER_COSLINES, // enable the "coslines" filter
+    FILTER_SWIRL, // enable the "swirl" filter
+    FILTER_TANGRAD, // enable the "tangrad" filter
+    FILTER_GRADIENT, // enable the "gradient" filter
+    //FILTER_FUZZY, // enable the "fuzzy" filter - NOTE: PRETTY FUCKED ATM
+    FILTER_POWREMAIN, // enable the "powremain" filter
+    FILTER_POWSUBTRACT // enable the "powsubtract" filter
+];
+
+let stream = fs.createWriteStream("morph.log", {flags:'a'});
+fs.writeFile('morph.log', '', (err) => {
+    err && console.log(err)
+}); // clean file
+
+
+for (let i = 1; i <= IMAGES_COUNT; i++) {
+    generate(i);
+}
+
+function getRandomizedFilterUsage(filter) {
+    switch (filter) {
+        case FILTER_CIRCLES:
+            return getRandomInt(0, 4);
+            break;
+        case FILTER_SINLINES:
+            return getRandomInt(0, 3);
+            break;
+        case FILTER_COSLINES:
+            return getRandomInt(0, 3);
+            break;
+        case FILTER_SWIRL:
+            return getRandomInt(0, 4);
+            break;
+        case FILTER_TANGRAD:
+            return getRandomInt(0, 4);
+            break;
+        case FILTER_GRADIENT:
+            return getRandomInt(0, 4);
+            break;
+        case FILTER_FUZZY:
+            return getRandomInt(0, 1);
+            break;
+        case FILTER_POWREMAIN:
+            return getRandomInt(0, 2);
+            break;
+        case FILTER_POWSUBTRACT:
+            return getRandomInt(0, 2);
+            break;
+        default:
+            return true;
+            break;
+    }
+}
+
+function logOutput(content) {
+    stream.write(`[${(new Date()).toISOString()}]: ${content}\n`);
 }
 
 
+function getUsableFilters() {
+    let usable_filters = [];
+
+    if (TEST_MODE) {
+        usable_filters.push(FILTER_TEST)
+    } else if (RANDOM_FILTERS) {
+        FILTERS.forEach((filter) => {
+            if (getRandomizedFilterUsage(filter)) {
+                usable_filters.push(filter);
+            }
+        });
+        logOutput(`Generated with random filters: ${usable_filters}`);
+    } else {
+        FILTERS.forEach((filter) => {
+            usable_filters.push(filter);
+        });
+    }
+
+    return usable_filters
+}
+
 function generate(num) {
+    let usable_filters = getUsableFilters();
 
-	var usable_filters = [];
-	if (TEST_MODE) {
-	
-		usable_filters.push("testfilter")
-	
-	} else if (RANDOM_FILTERS) {
-	
-		if (USE_TEST) usable_filters.push("testfilter")
-		if (USE_CIRCLES && getRandomInt(0, 4)) usable_filters.push("circles")
-		if (USE_SINLINES && getRandomInt(0, 3)) usable_filters.push("sinlines")
-		if (USE_COSLINES && getRandomInt(0, 3)) usable_filters.push("coslines")
-		if (USE_SWIRL && getRandomInt(0, 4)) usable_filters.push("swirl")
-		if (USE_TANGRAD && getRandomInt(0, 4)) usable_filters.push("tangrad")
-		if (USE_GRADIENT && getRandomInt(0, 4)) usable_filters.push("gradient")
-		if (USE_FUZZY && getRandomInt(0, 1)) usable_filters.push("fuzzy")
-		if (USE_POWREMAIN && getRandomInt(0, 2)) usable_filters.push("powremain")
-		if (USE_POWSUBTRACT && getRandomInt(0, 2)) usable_filters.push("powsubtract")
-	
-		stream.write('\n' + "generated with random filters - " + usable_filters + '\n')
-	
-	} else {
-	
-		if (USE_TEST)        usable_filters.push("testfilter")
-		if (USE_CIRCLES)     usable_filters.push("circles")
-		if (USE_SINLINES)    usable_filters.push("sinlines")
-		if (USE_COSLINES)    usable_filters.push("coslines")
-		if (USE_SWIRL)       usable_filters.push("swirl")
-		if (USE_TANGRAD)     usable_filters.push("tangrad")
-		if (USE_GRADIENT)    usable_filters.push("gradient")
-		if (USE_FUZZY)       usable_filters.push("fuzzy")
-		if (USE_POWREMAIN)   usable_filters.push("powremain")
-		if (USE_POWSUBTRACT) usable_filters.push("powsubtract")
-	}
+    logOutput(`Image ${num} generation start.`);
+    let image = new Jimp(RESOLUTION, RESOLUTION, function(err, image) {
+        let again = 0
+        let {width, height} = image.bitmap;
 
-	stream.write("image " + num + " generation start \n");
-	var image = new Jimp(RESOLUTION, RESOLUTION, function (err, image) {
+        for (let i = 1; i <= ITER_COUNT; i++) {
+            logOutput(`Iteration: ${i}`);
+            let randomPointX = 0;
+            let randomPointY = 0;
 
-		var again = 0
+            if (!again) {
+                randomPointX = getRandomInt(-RESOLUTION, RESOLUTION_DOUBLE);
+                randomPointY = getRandomInt(-RESOLUTION, RESOLUTION_DOUBLE);
+            } else if (getRandomInt(0, 1)) {
+                randomPointX += getRandomInt(-50, 50);
+                randomPointY += getRandomInt(-50, 50);
+            }
 
-		for (var i = 1; i <= ITER_COUNT; i++) {
+            let radius = getRandomInt(10, RESOLUTION_HALF);
+            again = getRandomInt(0, 1);
 
-			stream.write('\n' + "iteration " + i + '\n')
+            let randomFilterNumber = Math.floor(Math.random() * usable_filters.length);
+            switch (usable_filters[randomFilterNumber]) {
+                case FILTER_TEST:
+                    testfilter(this, randomPointX, randomPointY, radius);
+                    logOutput(`TESTING A NEW FILTER at X = ${randomPointX} Y = ${randomPointY} radius = ${radius}`);
+                    break;
+                case FILTER_CIRCLES:
+                    circles(this, randomPointX, randomPointY, radius);
+                    logOutput(`Circles at X = ${randomPointX} Y = ${randomPointY} radius = ${radius}`);
+                    break;
+                case FILTER_SINLINES:
+                    sinlines(this, randomPointX, randomPointY, radius);
+                    logOutput(`Sinlines at X = ${randomPointX} Y = ${randomPointY} radius = ${radius}`);
+                    break;
+                case FILTER_COSLINES:
+                    coslines(this, randomPointX, randomPointY, radius);
+                    logOutput(`Coslines at X = ${randomPointX} Y = ${randomPointY} radius = ${radius}`);
+                    break;
+                case FILTER_SWIRL:
+                    swirl(this, randomPointX, randomPointY, radius);
+                    logOutput(`Swirl at X = ${randomPointX} Y = ${randomPointY} radius = ${radius}`);
+                    break;
+                case FILTER_TANGRAD:
+                    tangrad(this, randomPointX, randomPointY, radius);
+                    logOutput(`Tangrad at X = ${randomPointX} Y = ${randomPointY} radius = ${radius}`);
+                    break;
+                case FILTER_GRADIENT:
+                    gradient(this, randomPointX, randomPointY, radius);
+                    logOutput(`Gradient at X = ${randomPointX} Y = ${randomPointY} radius = ${radius}`);
+                    break;
+                case FILTER_FUZZY:
+                    fuzzy(this, randomPointX, randomPointY, radius);
+                    logOutput(`Fuzzy at X = ${randomPointX} Y = ${randomPointY} radius = ${radius}`);
+                    break;
+                case FILTER_POWREMAIN:
+                    powremain(this, randomPointX, randomPointY, radius);
+                    logOutput(`Powremain at X = ${randomPointX} Y = ${randomPointY} radius = ${radius}`);
+                    break;
+                case FILTER_POWSUBTRACT:
+                    powsubtract(this, randomPointX, randomPointY, radius);
+                    logOutput(`Powsubtract at X = ${randomPointX} Y = ${randomPointY} radius = ${radius}`);
+                    break;
+                default:
+                    logOutput(`None of the filters could be applied.`);
+                    break;
+            }
 
-			if (!again) {
-				var randPtX = getRandomInt(-RESOLUTION, RESOLUTION*2),
-					randPtY = getRandomInt(-RESOLUTION, RESOLUTION*2)
-			} else if (getRandomInt(0, 1)) {
-				randPtX += getRandomInt(-50, 50)
-				randPtY += getRandomInt(-50, 50)
-			}
+            image.scan (0, 0, width, height, function(x, y, idx) {
+                this.bitmap.data[ idx + 3 ] = 255;
+            });
 
-			var radius = getRandomInt(10, RESOLUTION/2),
-				again = getRandomInt (0, 1)
+            let hue = [
+                getRandomInt(0, 255),
+                getRandomInt(0, 255),
+                getRandomInt(0, 255)
+            ];
 
+            if (i != ITER_COUNT && SAVE_ALL_ITERS) {
+                image.write(`outp${i}.png`);
+            }
+        }
 
-			switch (usable_filters[Math.floor(Math.random() * usable_filters.length)]) {
-				case "testfilter": 
-					testfilter(this, randPtX, randPtY, radius)
-					stream.write("TESTING A NEW FILTER at X = " + randPtX + " Y = " + randPtY + " radius = " + radius + "\n")
-					break;
-				case "circles":
-					circles(this, randPtX, randPtY, radius)
-					stream.write("circles at X = " + randPtX + " Y = " + randPtY + " radius = " + radius + "\n")
-					break;
-				case "sinlines":
-					sinlines(this, randPtX, randPtY, radius)
-					stream.write("sinlines at X = " + randPtX + " Y = " + randPtY + " radius = " + radius + "\n")
-					break;
-				case "coslines":
-					coslines(this, randPtX, randPtY, radius)
-					stream.write("coslines at X = " + randPtX + " Y = " + randPtY + " radius = " + radius + "\n")
-					break;
-				case "swirl":
-					swirl(this, randPtX, randPtY, radius)
-					stream.write("swirl at X = " + randPtX + " Y = " + randPtY + " radius = " + radius + "\n")
-					break;
-				case "tangrad":
-					tangrad(this, randPtX, randPtY, radius)
-					stream.write("tangrad at X = " + randPtX + " Y = " + randPtY + " radius = " + radius + "\n")
-					break;
-				case "gradient":
-					gradient(this, randPtX, randPtY, radius)
-					stream.write("gradient at X = " + randPtX + " Y = " + randPtY + " radius = " + radius + "\n")
-					break;
-				case "fuzzy":
-					fuzzy(this, randPtX, randPtY, radius)
-					stream.write("fuzzy at X = " + randPtX + " Y = " + randPtY + " radius = " + radius + "\n")
-					break;
-				case "powremain":
-					powremain(this, randPtX, randPtY)
-					stream.write("powremain at X = " + randPtX + " Y = " + randPtY + "\n")
-					break;
-				case "powsubtract":
-					powsubtract(this, randPtX, randPtY)
-					stream.write("powsubtract at X = " + randPtX + " Y = " + randPtY + "\n")
-					break;
-				case "default":
-					stream.write("none of the filters could be applied" + "\n")
-			}
+        const sat = SATURATION_CONST || getRandomInt(10, 100) / 100;
+        const oneMinusSat = Math.abs(1 - sat);
+        const getDotFromIdx = (max, data, idx) => {
+            return data[idx] + Math.abs(max - data[idx]) * oneMinusSat;
+        };
 
-			image.scan (0, 0, image.bitmap.width, image.bitmap.height, function (x, y, idx) {
-				this.bitmap.data[ idx + 3 ] = 255
-			});
-			var hue = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255)]
-			
-			
-
-			if (i != ITER_COUNT && SAVE_ALL_ITERS) {
-				image.write( "outp" + i + ".png" )
-			}
-		
-		}
-
-
-		var sat = SATURATION_CONST || getRandomInt(10, 100) / 100
-
-		image.scan(0, 0, image.bitmap.width, image.bitmap.height, function (x, y, idx) {
-
-			var max = Math.max(this.bitmap.data[ idx + 0 ], this.bitmap.data[ idx + 1 ], this.bitmap.data[ idx + 2 ])
-
-			this.bitmap.data[ idx + 0 ] += Math.abs(max - this.bitmap.data[ idx + 0 ]) * Math.abs(1 - sat)
-			if (this.bitmap.data[ idx + 0 ] > 255) this.bitmap.data[ idx + 0 ] = 255
-			this.bitmap.data[ idx + 1 ] += Math.abs(max - this.bitmap.data[ idx + 1 ])  * Math.abs(1 - sat)
-			if (this.bitmap.data[ idx + 1 ] > 255) this.bitmap.data[ idx + 1 ] = 255
-			this.bitmap.data[ idx + 2 ] += Math.abs(max - this.bitmap.data[ idx + 2 ])  * Math.abs(1 - sat)
-			if (this.bitmap.data[ idx + 2 ] > 255) this.bitmap.data[ idx + 2 ] = 255
-
-		});
-
-
-		image.write( "result/final" + num + ".png")
-
-		stream.write("generation end" + '\n\n\n')
-
-		delete image
-	});
+        image.scan(0, 0, width, height, function(x, y, idx) {
+            const {data} = this.bitmap;
+            const max = Math.max(
+                data[idx + 0],
+                data[idx + 1],
+                data[idx + 2]
+            );
+            this.bitmap.data[idx + 0] = Math.min(getDotFromIdx(max, data, idx + 0), 255);
+            this.bitmap.data[idx + 1] = Math.min(getDotFromIdx(max, data, idx + 1), 255);
+            this.bitmap.data[idx + 2] = Math.min(getDotFromIdx(max, data, idx + 2), 255);
+        });
+        const timestamp = (new Date()).toISOString();
+        image.write(`result/${timestamp}_${num}.png`);
+        logOutput(`Generation end\n\n`);
+        delete image
+    });
 }
 
 
 function circles(image, randPtX, randPtY, radius) {
-	var colA = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 200)], colB = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255)]
+    const colA = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 200)];
+    const {width, height, data} = image.bitmap;
+    const oneOverRadius = 1 / radius;
 
-	image.scan(0, 0, image.bitmap.width, image.bitmap.height, function (x, y, idx) {      
+    image.scan(0, 0, width, height, function (x, y, idx) {
+        const formula = dist([randPtX, randPtY], [x, y]) * oneOverRadius;
 
-		var formula = dist ([randPtX, randPtY], [x, y]) / radius
-
-		for (var i = 0; i < 3; i++) {
-			this.bitmap.data[ idx + i ] = Math.abs(this.bitmap.data[ idx + i ] - colA[i] * formula )
-		}
-	});
+        this.bitmap.data[idx+0] = Math.abs(data[idx+0] - colA[0] * formula);
+        this.bitmap.data[idx+1] = Math.abs(data[idx+1] - colA[1] * formula);
+        this.bitmap.data[idx+2] = Math.abs(data[idx+2] - colA[2] * formula);
+        this.bitmap.data[idx+3] = Math.abs(data[idx+3] - colA[3] * formula);
+    });
 }
 
 
 function sinlines(image, randPtX, randPtY, radius) {
-	var colA = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 200)], colB = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255)]
+    const colA = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 200)];
+    const {width, height, data} = image.bitmap;
 
-	image.scan(0, 0, image.bitmap.width, image.bitmap.height, function (x, y, idx) {      
+    image.scan(0, 0, width, height, function (x, y, idx) {
+        const xpercent = x * ONE_OVER_RESOLUTION;
+        const ypercent = y * ONE_OVER_RESOLUTION;
+        const sin = Math.sin(xpercent + ypercent);
 
-		var xpercent = x / RESOLUTION, 
-			ypercent = y / RESOLUTION
-
-		for (var i = 0; i < 3; i++) {
-			this.bitmap.data[ idx + i ] = Math.abs(this.bitmap.data[ idx + i ] + 127 + 0.5 * colA[i] * Math.sin(xpercent + ypercent))
-		}
-
-	});
+        this.bitmap.data[idx+0] = Math.abs(data[idx+0] + 127 + 0.5 * colA[0] * sin)
+        this.bitmap.data[idx+1] = Math.abs(data[idx+1] + 127 + 0.5 * colA[1] * sin)
+        this.bitmap.data[idx+2] = Math.abs(data[idx+2] + 127 + 0.5 * colA[2] * sin)
+        this.bitmap.data[idx+3] = Math.abs(data[idx+3] + 127 + 0.5 * colA[3] * sin)
+    });
 }
 
 
 function coslines(image, randPtX, randPtY, radius) {
-	var colA = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 200)], colB = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255)]
+    const colA = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 200)];
+    const {width, height, data} = image.bitmap;
 
-	image.scan(0, 0, image.bitmap.width, image.bitmap.height, function (x, y, idx) {      
+    image.scan(0, 0, width, height, function (x, y, idx) {
+        const xpercent = x * ONE_OVER_RESOLUTION;
+        const ypercent = y * ONE_OVER_RESOLUTION;
+        const cosin = Math.cos(xpercent + ypercent);
 
-		var xpercent = x / RESOLUTION, 
-			ypercent = y / RESOLUTION
-
-		for (var i = 0; i < 3; i++) {
-			this.bitmap.data[ idx + i ] = Math.abs(this.bitmap.data[ idx + i ] + 127 + 0.5 * colA[i] * Math.cos(xpercent + ypercent))
-		}
-	});
+        this.bitmap.data[idx+0] = Math.abs(data[idx+0] + 127 + 0.5 * colA[0] * cosin);
+        this.bitmap.data[idx+1] = Math.abs(data[idx+1] + 127 + 0.5 * colA[1] * cosin);
+        this.bitmap.data[idx+2] = Math.abs(data[idx+2] + 127 + 0.5 * colA[2] * cosin);
+        this.bitmap.data[idx+3] = Math.abs(data[idx+3] + 127 + 0.5 * colA[3] * cosin);
+    });
 }
 
 
 function swirl(image, randPtX, randPtY, radius) {
-	var colA = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 200)], colB = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255)]
+    const colA = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 200)];
+    const {width, height, data} = image.bitmap;
 
-	image.scan(0, 0, image.bitmap.width, image.bitmap.height, function (x, y, idx) {      
-
-		for (var i = 0; i < 3; i++) {
-			this.bitmap.data[ idx + i ] = Math.abs(this.bitmap.data[ idx + i ] - colA[i] * (1 / dist ([randPtX, randPtY], [x, y]) * radius ) )
-		}
-	});
+    image.scan(0, 0, width, height, function (x, y, idx) {
+        const distance = dist([randPtX, randPtY], [x, y]);
+        const swirlFactor = (1 / distance * radius);
+        this.bitmap.data[idx+0] = Math.abs(data[idx+0] - colA[0] * swirlFactor);
+        this.bitmap.data[idx+1] = Math.abs(data[idx+1] - colA[1] * swirlFactor);
+        this.bitmap.data[idx+2] = Math.abs(data[idx+2] - colA[2] * swirlFactor);
+        this.bitmap.data[idx+3] = Math.abs(data[idx+3] - colA[3] * swirlFactor);
+    });
 }
 
 
 function tangrad(image, randPtX, randPtY, radius) {
-	var colA = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 200)], colB = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255)]
+    const colA = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 200)];
+    const colB = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255)];
+    const {width, height, data} = image.bitmap;
 
-	image.scan(0, 0, image.bitmap.width, image.bitmap.height, function (x, y, idx) {      
-
-		var xpercent = x / RESOLUTION, 
-			ypercent = y / RESOLUTION,
-			formulaA = Math.tan(xpercent),
-			formulaB = Math.tan(ypercent),
-			resultingColor
-
-			for (var i = 0; i < 3; i++) {
-				resultingColor = colA[i] * formulaA - colB[i] * formulaB
-				this.bitmap.data[ idx + i ] = Math.abs(this.bitmap.data[ idx + i ] - resultingColor)
-			}
-
-	});
+    image.scan(0, 0, width, height, function (x, y, idx) {
+        const xpercent = x * ONE_OVER_RESOLUTION;
+        const ypercent = y * ONE_OVER_RESOLUTION;
+        const formulaA = Math.tan(xpercent);
+        const formulaB = Math.tan(ypercent);
+        this.bitmap.data[idx+0] = Math.abs(data[idx+0] - (colA[0] * formulaA - colB[0] * formulaB))
+        this.bitmap.data[idx+1] = Math.abs(data[idx+1] - (colA[1] * formulaA - colB[1] * formulaB))
+        this.bitmap.data[idx+2] = Math.abs(data[idx+2] - (colA[2] * formulaA - colB[2] * formulaB))
+        this.bitmap.data[idx+3] = Math.abs(data[idx+3] - (colA[3] * formulaA - colB[3] * formulaB))
+    });
 }
 
 
 function gradient(image, randPtX, randPtY, radius) {
-	var colA = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 200)],
-		colB = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255)]
+    const colA = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 200)];
+    const colB = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255)];
+    const {width, height, data} = image.bitmap;
 
-	image.scan(0, 0, image.bitmap.width, image.bitmap.height, function (x, y, idx) {      
+    image.scan(0, 0, width, height, function (x, y, idx) {
+        const xpercent = x * ONE_OVER_RESOLUTION;
+        const ypercent = y * ONE_OVER_RESOLUTION;
+        const oneMinusXPercent = 1 - xpercent;
 
-		var xpercent = x / RESOLUTION, 
-			ypercent = y / RESOLUTION
-
-		for (var i = 0; i < 3; i++) {
-			this.bitmap.data[ idx + i ] = Math.abs(this.bitmap.data[ idx + i ] - (xpercent * colA[i] + (1 - xpercent) * colB[i]))
-		}
-	});
+        this.bitmap.data[idx+0] = Math.abs(data[idx+0] - (xpercent * colA[0] + oneMinusXPercent * colB[0]));
+        this.bitmap.data[idx+1] = Math.abs(data[idx+1] - (xpercent * colA[1] + oneMinusXPercent * colB[1]));
+        this.bitmap.data[idx+2] = Math.abs(data[idx+2] - (xpercent * colA[2] + oneMinusXPercent * colB[2]));
+        this.bitmap.data[idx+3] = Math.abs(data[idx+3] - (xpercent * colA[3] + oneMinusXPercent * colB[3]));
+    });
 }
 
-
 function fuzzy(image, randPtX, randPtY, radius) {
-	var colA = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 200)]
+    const colA = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 200)];
+    const {width, height, data} = image.bitmap;
 
-	image.scan(0, 0, image.bitmap.width, image.bitmap.height, function (x, y, idx) {      
+    image.scan(0, 0, width, height, function (x, y, idx) {
+        const formula = dist([randPtX, randPtY], [x, y]) * getRandomInt(1, 1000) / 7500;
 
-		var formula = dist ([randPtX, randPtY], [x, y]) * getRandomInt(1, 1000) / 7500,
-			resultingColor
-
-		for (var i = 0; i < 3; i++) {
-			resultingColor = colA[i] / formula > 255 ? 255 : colA[i] / formula
-			this.bitmap.data[ idx + i ] = Math.abs(this.bitmap.data[ idx + i ] - resultingColor )
-		}
-	});
+        this.bitmap.data[idx+0] = Math.abs(data[idx+0] - Math.min(colA[0] / formula, 255));
+        this.bitmap.data[idx+1] = Math.abs(data[idx+1] - Math.min(colA[1] / formula, 255));
+        this.bitmap.data[idx+2] = Math.abs(data[idx+2] - Math.min(colA[2] / formula, 255));
+        this.bitmap.data[idx+3] = Math.abs(data[idx+3] - Math.min(colA[3] / formula, 255));
+    });
 }
 
 function powremain(image, randPtX, randPtY) {
-	var colA = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 200)]
+    const colA = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 200)];
+    const {width, height, data} = image.bitmap;
+    const randXSin = Math.sin(randPtX);
+    const randYSin = Math.sin(randPtY);
 
-	image.scan(0, 0, image.bitmap.width, image.bitmap.height, function (x, y, idx) { 
-		var xpercent = x / RESOLUTION, 
-			ypercent = y / RESOLUTION,
-			formula = Math.pow(xpercent, Math.sin(randPtX)) % Math.pow(ypercent, Math.sin(randPtY)),
-			resultingColor
+    image.scan(0, 0, width, height, function (x, y, idx) {
+        const xpercent = x * ONE_OVER_RESOLUTION;
+        const ypercent = y * ONE_OVER_RESOLUTION;
+        const formula = Math.pow(xpercent, randXSin) % Math.pow(ypercent, randYSin);
 
-		for (var i = 0; i < 3; i++) {
-			resultingColor = colA[i] / formula > 255 ? 255 : colA[i] / formula
-			this.bitmap.data[ idx + i ] = Math.abs(this.bitmap.data[ idx + i ] - resultingColor )
-		}
-	});
+        this.bitmap.data[idx+0] = Math.abs(data[idx+0] - Math.min(colA[0] / formula, 255));
+        this.bitmap.data[idx+1] = Math.abs(data[idx+1] - Math.min(colA[1] / formula, 255));
+        this.bitmap.data[idx+2] = Math.abs(data[idx+2] - Math.min(colA[2] / formula, 255));
+        this.bitmap.data[idx+3] = Math.abs(data[idx+3] - Math.min(colA[3] / formula, 255));
+    });
 }
 
 function powsubtract(image, randPtX, randPtY) {
-	var colA = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 200)], 
-		colB = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255)]
+    const colA = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 200)];
+    const {width, height, data} = image.bitmap;
+    const randXSin = Math.sin(randPtX);
+    const randYSin = Math.sin(randPtY);
 
-	image.scan(0, 0, image.bitmap.width, image.bitmap.height, function (x, y, idx) { 
-		var xpercent = x / RESOLUTION, 
-			ypercent = y / RESOLUTION,
-			formula = Math.pow(xpercent, Math.sin(randPtX)) - Math.pow(ypercent, Math.sin(randPtY)),
-			resultingColor
+    image.scan(0, 0, width, height, function (x, y, idx) {
+        const xpercent = x * ONE_OVER_RESOLUTION;
+        const ypercent = y * ONE_OVER_RESOLUTION;
+        const formula = Math.pow(xpercent, randXSin) - Math.pow(ypercent, randYSin);
 
-		for (var i = 0; i < 3; i++) {
-			resultingColor = colA[i] / formula > 255 ? 255 : colA[i] / formula
-			this.bitmap.data[ idx + i ] = Math.abs(this.bitmap.data[ idx + i ] - resultingColor )
-		}
-	});
+        this.bitmap.data[idx+0] = Math.abs(data[idx+0] - Math.min(colA[0] / formula, 255));
+        this.bitmap.data[idx+1] = Math.abs(data[idx+1] - Math.min(colA[1] / formula, 255));
+        this.bitmap.data[idx+2] = Math.abs(data[idx+2] - Math.min(colA[2] / formula, 255));
+        this.bitmap.data[idx+3] = Math.abs(data[idx+3] - Math.min(colA[3] / formula, 255));
+    });
 }
 
 // formula = Math.abs(Math.pow(x, coef1)-Math.pow(y, Math.sin(coef2)))
 // formula = Math.abs(Math.pow(xpercent, coef1)*Math.pow(ypercent, Math.sin(coef2)))
 
 function testfilter(image, randPtX, randPtY, radius) {
-	var colA = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 200)], colB = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255)]
+    const colA = [getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 255), getRandomInt(0, 200)];
+    const {width, height, data} = image.bitmap;
+    const coef1 = getRandomInt(0, 5);
+    const coef2 = getRandomInt(0, 5);
 
-	// randPtX = 500
-	// randPtY = 500
-	var coef1 = getRandomInt(0, 5)
-	var coef2 = getRandomInt(0, 5)
+    let min = 999999;
+    let max = -999999;
 
-	var min = 999999,
-		max = -999999,
-		coef = getRandomInt(1, 1000) / 7500
+    image.scan(0, 0, width, height, function (x, y, idx) {
+        const xpercent = x * ONE_OVER_RESOLUTION;
+        const ypercent = y * ONE_OVER_RESOLUTION;
+        const formula = Math.abs(Math.pow(xpercent, coef1)*Math.pow(ypercent, Math.sin(coef2)));
+        max = Math.max(formula, max);
+        min = Math.min(formula, min);
 
-	image.scan(0, 0, image.bitmap.width, image.bitmap.height, function (x, y, idx) {      
+        this.bitmap.data[idx+0] = Math.abs(data[idx+0] - Math.min(colA[0] * formula, 255));
+        this.bitmap.data[idx+1] = Math.abs(data[idx+1] - Math.min(colA[1] * formula, 255));
+        this.bitmap.data[idx+2] = Math.abs(data[idx+2] - Math.min(colA[2] * formula, 255));
+        this.bitmap.data[idx+3] = Math.abs(data[idx+3] - Math.min(colA[3] * formula, 255));
+    });
 
-		var xpercent = x / RESOLUTION, 
-			ypercent = y / RESOLUTION,
-				
-			formula = Math.abs(Math.pow(xpercent, coef1)*Math.pow(ypercent, Math.sin(coef2))),
-			resultingColor
-
-
-
-		if (formula > max) {
-			max = formula
-		}
-		if (formula < min) {
-			min = formula
-		}
-
-		for (var i = 0; i < 3; i++) {
-			resultingColor = colA[i] * formula > 255 ? 255 : colA[i] * formula
-			this.bitmap.data[ idx + i ] = Math.abs(this.bitmap.data[ idx + i ] - resultingColor )
-		}
-
-	});
-
-	stream.write("min = " + min + " max = " + max + " coef = " + coef + "\n")
+    logOutput(`min = ${min}, max = ${max}, coef1 = ${coef1}, coef2 = ${coef2}`);
 }
 
 
 function getRandomInt(min, max) {
-	return Math.floor(Math.random() * (max + 1 - min)) + min
+    return Math.floor(Math.random() * (max + 1 - min)) + min
 }
 
 function dist(ptA, ptB) {
-	return Math.hypot(ptA[0] - ptB[0], ptA[1] - ptB[1])
+    return Math.hypot(ptA[0] - ptB[0], ptA[1] - ptB[1])
 }
 
-
-stream.write("end \n")
+logOutput(`End`);
