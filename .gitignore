@@ -1,5 +1,6 @@
 # Result images
 *.png
+result/
 
 # Logs
 logs
